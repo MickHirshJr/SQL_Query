@@ -1,0 +1,334 @@
+--SQL Queries for data cleaning and EDA.
+
+Select * From Taxi_fare.dbo.Taxi_Set1
+
+
+--Updating columns distance_travled, fees and total fare 
+UPDATE Taxi_fare.dbo.Taxi_Set1  
+SET distance_traveled_KM = ROUND(distance_traveled_KM, 2)
+
+UPDATE Taxi_fare.dbo.Taxi_Set1  
+SET total_fare = ROUND(total_fare, 2)
+
+UPDATE Taxi_fare.dbo.Taxi_Set1  
+SET miscellaneous_fees = ROUND(miscellaneous_fees, 2)
+
+Select * From Taxi_fare.dbo.Taxi_Set1
+ALTER TABLE Taxi_fare.dbo.Taxi_Set1
+ADD trip_duration_min FLOAT;
+
+--Added trip_duration_new to *_*_minutes and round to 2 places
+
+UPDATE Taxi_fare.dbo.Taxi_Set1
+SET trip_duration_min = (trip_duration_sec/60.0)
+
+-- Round to 2 places
+UPDATE Taxi_fare.dbo.Taxi_Set1
+SET trip_duration_min = ROUND(trip_duration_min, 2)
+
+ALTER TABLE Taxi_fare.dbo.Taxi_Set1
+DROP COLUMN trip_duration_new;
+
+--New Column trip_duration_hrs and round to 2 places
+ALTER TABLE Taxi_fare.dbo.Taxi_Set1
+ADD trip_duration_hr FLOAT;
+
+-- Not rounding the hrs to prevent division by Zero will be using this column for KPH (Kilometers per Hour) check speeds of the taxis
+UPDATE Taxi_fare.dbo.Taxi_Set1
+SET trip_duration_hr = (trip_duration_min/60.0)
+
+ 
+-- Find Null values trip_duration_min, distance_traveled_KM, num_of_passenagers, fare, tip, miscellaneous_fees, total_fare, surge_applied
+
+SELECT * 
+FROM Taxi_Fare.dbo.Taxi_Set1
+WHERE num_of_passengers IS NULL 
+
+-- Find lower limit 0 for the following trip_duration_min, distance_traveled_KM, num_of_passengers, fare, and total_fare
+
+-- trip_duration_sec was true going to drop this data doesn't assuming I check with data leads first and couldn't find the data for the zero values.
+SELECT * 
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_sec = 0
+
+-- Deleting Rows
+DELETE FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_sec = 0;
+
+--Check 
+SELECT * 
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_sec = 0
+
+--We have data here the KM (distance) and time need to be check the speed of the taxi is too fast for the distances the taxi is going. 
+-- V=D/T gives the velocity of the taxi.
+
+-- distance_traveled_KM is 0
+SELECT * 
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE distance_traveled_KM  = 0
+
+-- num_of_passengers was going to set that to 1
+SELECT * 
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE num_of_passengers = 0
+
+-- Update Column num_of_passengers from 0 to 1
+UPDATE Taxi_fare.dbo.Taxi_Set1
+SET num_of_passengers = 1
+WHERE num_of_passengers = 0
+
+-- fare going to drop this data
+SELECT * 
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE fare = 0
+
+-- total fare going to frop this data
+SELECT * 
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE total_fare = 0
+
+--Deleting zero data rows
+DELETE FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_min = 0
+
+--Check 
+SELECT * 
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_min = 0
+
+--Check surge applied 
+SELECT * 
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE surge_applied < 0 AND surge_applied > 1 
+
+
+
+-- Showing only miscellaneous fees are -0.25 and -0.5 for 7 rows will keep the data. 
+SELECT * 
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_min < 0 OR distance_traveled_KM < 0 OR num_of_passengers < 0 OR fare < 0 OR tip < 0 OR miscellaneous_fees < 0 OR total_fare < 0  
+
+--Need to check upper limits with the data. Check all columns
+SELECT max("column name")
+FROM Taxi_fare.dbo.Taxi_Set1
+
+
+--These fares came from Philadelphia, PA 
+-- First 1/10 mile (flag drop) or fraction thereof: $2.70
+-- Each additional 1/10 mile or fraction thereof: $0.25
+-- Each 37.6 seconds of wait time: $0.25
+-- .1 mile = 0.160934 KM
+
+-- Need to update the fares are not following a taxi fare limits. I'm using fare limits from Philadelphia, PA
+
+-- Making a new Column called wait time cost which will be (trip in sec / 37.6 sec)*0.25
+ALTER TABLE Taxi_fare.dbo.Taxi_Set1
+ADD wait_time_cost FLOAT;
+
+--Update trip_duration_min to sec 
+UPDATE Taxi_fare.dbo.Taxi_Set1
+SET wait_time_cost = ((trip_duration_sec/37.6)*0.25)
+
+-- Round the wait_time_cost
+UPDATE Taxi_fare.dbo.Taxi_Set1  
+SET wait_time_cost = ROUND(wait_time_cost, 2)
+
+-- Making a new Column called distance cost which will be each additional 1/10 mile or fraction thereof: $0.25
+-- .1 mile = 0.160934 KM = 160.934 M
+ALTER TABLE Taxi_fare.dbo.Taxi_Set1
+ADD distance_cost FLOAT;
+
+--Update distance cost   
+UPDATE Taxi_fare.dbo.Taxi_Set1
+SET distance_cost = ((distance_traveled_KM/0.160934)*0.25)
+
+UPDATE Taxi_fare.dbo.Taxi_Set1  
+SET distance_cost = ROUND(distance_cost, 2)
+
+-- First 1/10 mile (flag drop) or fraction thereof: $2.70
+ALTER TABLE Taxi_fare.dbo.Taxi_Set1
+ADD fare_w_flag FLOAT;
+
+--Update distance cost which is  
+UPDATE Taxi_fare.dbo.Taxi_Set1
+SET fare_w_flag = ((wait_time_cost + distance_cost)+2.70)
+
+UPDATE Taxi_fare.dbo.Taxi_Set1  
+SET fare_w_flag = ROUND(fare_w_flag, 2)
+
+--New Total Fare Column
+ALTER TABLE Taxi_fare.dbo.Taxi_Set1
+ADD total_fare_new FLOAT;
+
+--Add fare w flag and tip and miscellaneous into total fare new
+UPDATE Taxi_fare.dbo.Taxi_Set1
+SET total_fare_new = fare_w_flag + tip + miscellaneous_fees
+
+-- Drop Columns fare and total_fare
+ALTER TABLE Taxi_fare.dbo.Taxi_Set1
+DROP COLUMN fare, total_fare; 
+
+--Checking the data set
+SELECT *
+FROM Taxi_fare.dbo.Taxi_Set1
+
+--New Total Speed Column
+ALTER TABLE Taxi_fare.dbo.Taxi_Set1
+ADD KPH FLOAT;
+
+-- Speed in KPH --getting a division by 0 change the trip_duration_hr not to round on line 31
+UPDATE Taxi_fare.dbo.Taxi_Set1
+SET KPH = distance_traveled_KM/trip_duration_hr;
+
+-- Check for the Division by Zero issue
+SELECT * 
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_hr = 0
+
+--Check KPH is updated
+SELECT *
+FROM Taxi_fare.dbo.Taxi_Set1
+
+
+-- Checking for speeds in the data set that are not realistic
+-- there are unrealistic speeds in the data
+-- To travel 20.12 KM you need to going 1207.2 KPH and 10.65 KM you need to go 213 KPH
+-- Going to set an upper boundry limit to 130 KPH which is ~80 MPH
+-- One minute at 100 KPH Taxi can travel 1.67 KM
+-- One minute at 130 KPH Taxi can travel 2.17 KM
+-- Have 101 rows as incorrect data 
+SELECT *
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_sec > 0 AND trip_duration_sec <= 60 AND distance_traveled_KM > 1.68
+
+-- Finding outliers 251 rows of data
+SELECT *
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE KPH > 130
+
+--Deleting > 130 KM to remove all the speed outliers in the data set
+DELETE FROM Taxi_fare.dbo.Taxi_Set1
+WHERE KPH > 130
+
+-- Saw 251 Rows Affected is a match
+Checking Outliers 
+SELECT * 
+FROM Taxi_fare.dbo.Taxi_Set1
+
+--Check lower limits Nomral Taxi rides can be up to an hour and have 545 rows that are over 1.5 Hours or 90 minutes
+SELECT * 
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_hr > 1.5
+
+-- check when trip duration over 20 hours check distance travel and KPH is valid  
+-- check KPH = 130 - 100: no data, 100 - 80, 80-60, 60-40, Speeds are not not valid checking lower than 10
+-- Rows KPH was 240 with speeds below 0.9 KPH 
+SELECT *
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_hr > 20 and KPH <= 0.9
+
+--Delete Outlier Rows with KPH < 0.9 and time over 20 hours
+DELETE FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_hr > 20 AND KPH < 0.9
+
+--check outliers 0.9 KPH removed
+SELECT *
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_hr > 20 AND KPH <= 0.9
+
+--Check Outliers for 10 KPH and over 20 hours nine rows
+SELECT *
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_hr > 20 AND KPH <= 10
+
+--Delete Outlier Rows with KPH <=10 and time over 20 hours
+DELETE FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_hr > 20 AND KPH <= 10
+
+-- Check for trips > 10 hours Data set has 7 rows of outliers KPH ~1.5 to 3.5 
+SELECT *
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_hr > 10 
+
+--Delete Outlier time over 10 hours and very low KPH
+DELETE FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_hr > 10
+
+-- Check for trips > 5 hours Data set has 12 rows of outliers KPH ~1.5 to  
+SELECT *
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_hr > 5
+
+--Delete Outlier time over 5 hours and very low KPH
+DELETE FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_hr > 5
+
+-- Check for trips hours 4 and 4.9 hours rows 10 distance and speeds look invalid. 
+-- Would check on one row with a lead but assuming I did and told to remove the rows
+SELECT *
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_hr >= 4 AND trip_duration_hr < 5
+
+--Delete Outlier time between 4 and 4.9 hours and very low KPH
+DELETE FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_hr >= 4 AND trip_duration_hr < 5
+
+
+--Check for trips hours 3 and 3.9 hours rows 13 distance and speeds look invalid. One questionable row 82.508 KPH ~51 MPH and traveling 315.25 KM
+--Again I would check this with the Lead, but assuming it is an outlier. If the KHP was ~100 - 130 KHP I would leave in the data set.
+SELECT *
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_hr >= 3.0 AND trip_duration_hr < 3.9
+
+--Delete Outlier Rows with trip_duration_hr >= 3.0 AND < 3.9 hours 
+DELETE FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_hr >= 3.0 AND trip_duration_hr < 3.9
+
+--Check for trips hours 2 and 2.9 hours rows 47 distance and speeds look invalid. 
+SELECT *
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_hr >= 2.0 AND trip_duration_hr < 2.9 AND KPH <= 20 
+
+
+--Delete Outlier Rows with trip_duration_hr >= 2 AND < 2.9 hours 
+DELETE FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_hr >= 2.0 AND trip_duration_hr < 2.9 AND KPH <= 20
+
+--Check for trips hours 1 and 1.9 hours and assume ~24 KPH (in the city ~ 15 mph) 401 rows
+-- changing to KPH <= 5 and no distance check; Assuming a lead check with the data to drop this data as invalid with distances traveled and speed. 
+-- The person can walk faster
+SELECT *
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_hr >= 1.0 AND trip_duration_hr < 1.9  AND KPH <= 5 -- AND distance_traveled_KM < 20 
+
+--Delete Outlier Rows with trip_duration_hr >= 1 AND < 1.9 hours AND KPH <= 5 
+DELETE FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_hr >= 1.0 AND trip_duration_hr < 1.9 AND KPH <= 5
+
+--Check for trips hours 1 and 1.9 hours 
+-- changing to KPH <= 16 ~ 10 mph distance > 10 KM; Assuming a lead check with the data to drop this data as invalid with distances traveled and speed. 
+-- The person can walk faster
+SELECT *
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_hr >= 1.0 AND trip_duration_hr < 1.9 AND KPH <15.9 AND distance_traveled_KM > 16.7 AND distance_traveled_KM <= 20
+
+-- Delete Outlier Rows with trip_duration_hr >= 1 AND < 1.9 hours AND KPH <= 15.9 and KM 16.7 AND <= 20 
+DELETE FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_hr >= 1.0 AND trip_duration_hr < 1.9 AND KPH <= 15.9 AND distance_traveled_KM > 16.7 AND distance_traveled_KM <= 20
+
+--Check for trips hours 0 and 1 hours 
+SELECT *
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE trip_duration_hr >= 0.0 AND trip_duration_hr < 1 AND KPH > 80 -- AND distance_traveled_KM > 16.7 AND distance_traveled_KM <= 20
+
+-- Making an assume <= 15.9 KPH traffic jam with KM > 5 and 1.5 hour 
+-- Assuming I asked questions to leads to go over the data assume first
+SELECT *
+FROM Taxi_fare.dbo.Taxi_Set1
+WHERE KPH > 0.0 AND KPH < 15.9 AND distance_traveled_KM > 5 AND trip_duration_hr <= 1.5
+
+
+SELECT * FROM Taxi_fare.dbo.Taxi_Set1
+
+
